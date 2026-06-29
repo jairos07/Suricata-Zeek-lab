@@ -1,0 +1,8 @@
+sudo docker run -d \
+  --name zeek \
+  --network host \
+  --cap-add NET_RAW \
+  --cap-add NET_ADMIN \
+  -v /opt/zeek-logs:/logs \
+  zeek/zeek:latest \
+  zeek -i ens20 LogAscii::use_json=T Log::default_logdir=/logs
