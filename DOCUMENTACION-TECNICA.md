@@ -64,6 +64,9 @@
    - 6.10 [Panel con logs de Suricata en tiempo real](#610-panel-con-logs-de-suricata-en-tiempo-real)
    - 6.11 [Editor de panel — query de logs Zeek](#611-editor-de-panel--query-de-logs-zeek)
 
+7. [Evidencias de detección](#7-evidencias-de-detección)
+   - 7.1 [Verificación de alertas con jq sobre eve.json](#71-verificación-de-alertas-con-jq-sobre-evejson)
+
 ---
 
 ## 1. Creación de la máquina virtual en Proxmox
@@ -937,6 +940,46 @@ Panel equivalente para logs de Zeek, con la query LogQL:
 ```
 
 El panel muestra las entradas de `conn.log` y `dns.log` de Zeek en formato JSON, con el mismo tipo de visualización Logs. La separación por etiqueta (`job="suricata"` vs `job="zeek"`) permite crear paneles independientes para cada herramienta dentro del mismo dashboard, manteniendo la visibilidad centralizada de todo el tráfico analizado por el sensor NDR.
+
+---
+
+## 7. Evidencias de detección
+
+### 7.1 Verificación de alertas con jq sobre eve.json
+
+![Verificación de alertas con jq](img/evidencias/comprobacion.png)
+
+Consulta directa sobre el histórico de alertas almacenado en `/var/log/suricata/eve.json.bak`, filtrando únicamente los eventos de tipo `alert` con `jq`:
+
+```bash
+sudo jq -c 'select(.event_type=="alert")' /var/log/suricata/eve.json.bak | tail -5
+```
+
+Las últimas entradas devueltas muestran una alerta repetida:
+
+```json
+{
+  "event_type": "alert",
+  "in_iface": "ens20",
+  "proto": "UDP",
+  "src_port": 68,
+  "dest_port": 67,
+  "alert": {
+    "action": "allowed",
+    "signature_id": 2022973,
+    "signature": "ET INFO Possible Kali Linux hostname in DHCP Request Packet",
+    "category": "Potential Corporate Privacy Violation",
+    "severity": 1
+  },
+  "app_proto": "dhcp"
+}
+```
+
+Datos clave de la evidencia:
+- **Firma disparada**: `ET INFO Possible Kali Linux hostname in DHCP Request Packet` (`signature_id 2022973`) — Suricata identifica una petición DHCP (puertos 68→67) cuyo hostname del cliente delata un origen **Kali Linux**, típico de un equipo de pentesting conectado a la red monitorizada.
+- **Interfaz de captura**: `ens20`, confirmando que la alerta proviene del tráfico capturado en modo promiscuo por el sensor.
+- **Severidad**: 1 (informativa) y **categoría**: *Potential Corporate Privacy Violation* — el evento se clasifica como informativo y no como una amenaza crítica, pero es útil para inventariar equipos de auditoría/pentest en la red.
+- El uso de `jq -c` con `select(.event_type=="alert")` permite aislar únicamente los eventos de alerta dentro del volumen de eventos que registra `eve.json` (flows, DNS, HTTP, stats, etc.), validando de forma práctica que el motor de detección de Suricata está generando alertas reales a partir del tráfico capturado.
 
 ---
 
